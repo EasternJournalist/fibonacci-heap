@@ -1,11 +1,12 @@
 #pragma once
 
-#include <algorithm>
 #include <assert.h>
+#include <vector>
+#include <list>
 
 namespace std {
 
-    template <class _Ty, class _Pr = less<typename _Ty>>
+    template <class _Ty, class _Pr = less<typename _Ty>, class _Alloc = allocator<_Ty>>
     class fibonacci_heap;
 
     
@@ -86,7 +87,7 @@ namespace std {
     template <class _Ty, class _Pr = less<typename _Ty>>
     class _fibonacci_heap_node {
         friend fibonacci_heap<_Ty, _Pr>;
-    public:
+    private:
         using _ptr_t = _fibonacci_heap_node<_Ty, _Pr>*;
         _ptr_t    a_child;
         _ptr_t    parent;
@@ -109,7 +110,7 @@ namespace std {
         /// Make a new root node
         /// </summary>
         /// <param name="v"></param>
-        _fibonacci_heap_node(const _Ty& v) : value{ v }, parent{ nullptr }, degree { 0 }{
+        _fibonacci_heap_node(const _Ty& v) : value{ v }, parent{ nullptr }, root{ nullptr }, degree{ 0 }{
             left_sibling = this;
             right_sibling = this;
             a_child = nullptr;
@@ -168,38 +169,61 @@ namespace std {
             } while (p != _head);
         }
     };
-
+    
     /*
-    template <class _Ty, class _Pr>
+    template <class _Ty, class _Pr, class _Alloc>
     class fibonacci_heap_iterator {
+    public:
+        using _Alty = _Rebind_alloc_t<_Alloc, _Ty>;
+        using _Alty_traits = allocator_traits<_Alty>;
+        using reference = _Ty&;
+        using pointer   = _Ty*;
+
         _fibonacci_heap_node<_Ty, _Pr>* _Ptr;
+
         _NODISCARD reference operator*() const {
             return const_cast<reference>(_Mybase::operator*());
         }
-
+    public:
         _NODISCARD pointer operator->() const {
-            return pointer_traits<pointer>::pointer_to(*_Ptr);
+            return *_Ptr->value;
         }
     };
     */
     
+    
+    
+    
+    
 
-    template <class _Ty, class _Pr = less<typename _Ty>>
+    template <class _Ty, class _Pr, class _Alloc>
     class fibonacci_heap {
-    public:
-        using value_type = _Ty;
-        using value_compare = _Pr;
-        
     private:
-        using heap_node_t = _fibonacci_heap_node<_Ty, _Pr>;
-        using heap_ptr_t = _fibonacci_heap_node<_Ty, _Pr>*;
-        using root_list_node_t = _DLlist_node<_fibonacci_heap_node<_Ty, _Pr>*>;
-        using root_list_ptr_t = _DLlist_node<_fibonacci_heap_node<_Ty, _Pr>*>*;
+        using _Alty = _Rebind_alloc_t<_Alloc, _Ty>;
+        using _Alty_traits = allocator_traits<_Alty>;
 
+        
+    public:
+        using value_type        = _Ty;
+        using value_compare     = _Pr;
+        using reference         = _Ty&;
+        using allocator_type    = _Alloc;
+        using const_reference   = const _Ty&;
+        using pointer           = typename _Alty_traits::pointer;
+        using const_pointer     = typename _Alty_traits::const_pointer;
+        using size_type         = typename _Alty_traits::size_type;
+        using difference_type   = typename _Alty_traits::difference_type;
+
+        //using iterator = fibonacci_heap_iterator<_Ty, _Pr, _Alloc>;
+    private:
+        using heap_node_t       = _fibonacci_heap_node<_Ty, _Pr>;
+        using heap_ptr_t        = _fibonacci_heap_node<_Ty, _Pr>*;
+        using root_list_node_t  = _DLlist_node<_fibonacci_heap_node<_Ty, _Pr>*>;
+        using root_list_ptr_t   = _DLlist_node<_fibonacci_heap_node<_Ty, _Pr>*>*;
 
     private:
         root_list_ptr_t _min_pointer;
-        size_t _size;
+        size_type       _size;
 
         /// <summary>
         /// Add _Node to root list, compare and update min.
@@ -296,8 +320,38 @@ namespace std {
                 _Node->parent->marked = true;
         }
     public:
+        /// <summary>
+        /// Make an empty heap
+        /// </summary>
         fibonacci_heap() : _min_pointer{ nullptr }, _size{ 0 } {
 
+        }
+
+        /// <summary>
+        /// Make a heap from std::initializer_list
+        /// </summary>
+        fibonacci_heap(const initializer_list<_Ty>& _Al) {
+            for (_Ty it : _Al)
+                add_to_root_list(new heap_node_t(it));
+            _size = _Al.size();
+        }
+
+        /// <summary>
+        /// Make a heap from std::vector
+        /// </summary>
+        explicit fibonacci_heap(const vector<_Ty>& _Al) {
+            for (_Ty it : _Al)
+                add_to_root_list(new heap_node_t(it));
+            _size = _Al.size();
+        }
+
+        /// <summary>
+        /// Make a heap from std::list
+        /// </summary>
+        explicit fibonacci_heap(const list<_Ty>& _Al) {
+            for (_Ty it : _Al)
+                add_to_root_list(new heap_node_t(it));
+            _size = _Al.size();
         }
 
         ~fibonacci_heap() {
@@ -309,6 +363,10 @@ namespace std {
                 delete p;
                 p = pn;
             } while (p != _min_pointer);
+        }
+
+        fibonacci_heap(const fibonacci_heap<_Ty, _Pr, _Alloc>& _Right) {
+
         }
 
         /// <summary>
@@ -361,7 +419,7 @@ namespace std {
         /// Return top min
         /// </summary>
         /// <returns></returns>
-        inline _Ty& top() const{
+        reference top() const{
             return _min_pointer->data->value;
         }
 
@@ -408,7 +466,7 @@ namespace std {
         /// </summary>
         /// <param name="_Node"></param>
         /// <param name="_Val"></param>
-        void modify_key(heap_ptr_t _Node, const _Ty& _Val) {
+        void modify_key(heap_ptr_t _Node, const_reference _Val) {
             static _Pr comp;
             // Decrease
             if (comp(_Val, _Node->value)) {
@@ -445,7 +503,7 @@ namespace std {
             std::swap(_size, _Right._size);
         }
 
-        size_t size() noexcept{
+        size_type size() noexcept{
             return _size;
         }
 
